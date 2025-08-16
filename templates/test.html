@@ -19,7 +19,7 @@
     async function ask(){
       const q = document.getElementById("question").value;
       const res = await fetch("/ask?q=" + encodeURIComponent(q), {
-        headers: { "X-API-Key": "YOUR_API_KEY_HERE" }  // ⚠️ thay bằng API key thật
+        headers: { "X-API-Key": "AIzaSyA22-Sh4sHm7AgB2EOmyrrti-jKQnaSxfE" }  // ⚠️ thay bằng API key thật
       });
       const data = await res.json();
       document.getElementById("result").textContent = JSON.stringify(data, null, 2);
@@ -27,3 +27,4 @@
   </script>
 </body>
 </html>
+
