@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <title>Chatbot API (Gemini)</title>
+  <title>Chatbot Gemini API</title>
   <style>
     body { font-family: Arial, sans-serif; max-width: 700px; margin: 40px auto; }
     input, button { padding: 10px; margin-top: 10px; width: 100%; border-radius: 6px; border: 1px solid #ccc; }
@@ -10,7 +10,7 @@
   </style>
 </head>
 <body>
-  <h2>Chatbot API (Gemini)</h2>
+  <h2>Chatbot Gemini API</h2>
   <input id="question" placeholder="Nhập câu hỏi...">
   <button onclick="ask()">Gửi</button>
   <pre id="result"></pre>
@@ -18,13 +18,13 @@
   <script>
     async function ask(){
       const q = document.getElementById("question").value;
-      const res = await fetch("/ask?q=" + encodeURIComponent(q), {
-        headers: { "X-API-Key": "AIzaSyA22-Sh4sHm7AgB2EOmyrrti-jKQnaSxfE" }  // ⚠️ thay bằng API key thật
-      });
+      if(!q) return;
+      const res = await fetch("/ask?q=" + encodeURIComponent(q));
       const data = await res.json();
-      document.getElementById("result").textContent = JSON.stringify(data, null, 2);
+      document.getElementById("result").textContent = data.ok 
+        ? data.answer 
+        : "❌ Error: " + data.error;
     }
   </script>
 </body>
 </html>
-
