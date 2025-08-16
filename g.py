@@ -1,19 +1,17 @@
-import os
 import requests
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 
+# ====== CONFIG ======
+API_KEY = "AIzaSyA22-Sh4sHm7AgB2EOmyrrti-jKQnaSxfE"  # ⚠️ key của bạn
 DEFAULT_MODEL = "gemini-2.0-flash"
 GEMINI_ENDPOINT_TMPL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
-app = Flask(__name__, static_folder="../static", static_url_path="")
+app = Flask(__name__, template_folder="templates")
 CORS(app)
 
-def call_gemini(question: str, api_key: str, model: str = DEFAULT_MODEL):
-    if not api_key:
-        return {"ok": False, "error": "Missing API key"}
-
-    url = GEMINI_ENDPOINT_TMPL.format(model=model) + f"?key={api_key}"
+def call_gemini(question: str, model: str = DEFAULT_MODEL):
+    url = GEMINI_ENDPOINT_TMPL.format(model=model) + f"?key={API_KEY}"
     payload = {"contents": [{"parts": [{"text": question}]}]}
     resp = requests.post(url, json=payload)
 
@@ -37,7 +35,7 @@ def ask():
     if request.method == "GET":
         q = request.args.get("q", "").strip()
         model = request.args.get("model", DEFAULT_MODEL)
-    else:  # POST
+    else:
         body = request.get_json(silent=True) or {}
         q = body.get("question", "").strip()
         model = body.get("model", DEFAULT_MODEL)
@@ -45,17 +43,12 @@ def ask():
     if not q:
         return jsonify({"ok": False, "error": "Missing question"}), 400
 
-    api_key = (
-        request.headers.get("X-API-Key")
-        or os.getenv("GEMINI_API_KEY")
-    )
-
-    result = call_gemini(q, api_key, model)
+    result = call_gemini(q, model)
     return jsonify(result)
 
 @app.route("/")
 def index():
-    return send_from_directory(app.static_folder, "test.html")
+    return render_template("test.html")
 
 if __name__ == "__main__":
     app.run(debug=True)
