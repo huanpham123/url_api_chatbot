@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Chatbot API (Gemini)</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 700px; margin: 40px auto; }
+    input, button { padding: 10px; margin-top: 10px; width: 100%; border-radius: 6px; border: 1px solid #ccc; }
+    pre { background: #f5f5f5; padding: 12px; border-radius: 6px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h2>Chatbot API (Gemini)</h2>
+  <input id="question" placeholder="Nhập câu hỏi...">
+  <button onclick="ask()">Gửi</button>
+  <pre id="result"></pre>
+
+  <script>
+    async function ask(){
+      const q = document.getElementById("question").value;
+      const res = await fetch("/ask?q=" + encodeURIComponent(q), {
+        headers: { "X-API-Key": "YOUR_API_KEY_HERE" }  // ⚠️ thay bằng API key thật
+      });
+      const data = await res.json();
+      document.getElementById("result").textContent = JSON.stringify(data, null, 2);
+    }
+  </script>
+</body>
+</html>
