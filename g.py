@@ -1,5 +1,5 @@
 import requests
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, Response, render_template
 from flask_cors import CORS
 
 # ====== CONFIG ======
@@ -16,35 +16,33 @@ def call_gemini(question: str, model: str = DEFAULT_MODEL):
     resp = requests.post(url, json=payload)
 
     if resp.status_code != 200:
-        return {"ok": False, "error": resp.text}
+        return None
 
     data = resp.json()
-    text = ""
     try:
         candidates = data.get("candidates", [])
         if candidates:
             parts = candidates[0].get("content", {}).get("parts", [])
-            text = "".join(p.get("text", "") for p in parts)
+            return "".join(p.get("text", "") for p in parts)
     except Exception:
-        pass
+        return None
 
-    return {"ok": True, "answer": text or "No response", "model": model}
+    return None
 
-@app.route("/ask", methods=["GET", "POST"])
+@app.route("/ask", methods=["GET"])
 def ask():
-    if request.method == "GET":
-        q = request.args.get("q", "").strip()
-        model = request.args.get("model", DEFAULT_MODEL)
-    else:
-        body = request.get_json(silent=True) or {}
-        q = body.get("question", "").strip()
-        model = body.get("model", DEFAULT_MODEL)
+    q = request.args.get("q", "").strip()
+    model = request.args.get("model", DEFAULT_MODEL)
 
     if not q:
-        return jsonify({"ok": False, "error": "Missing question"}), 400
+        return Response("⚠️ Missing question", mimetype="text/plain", status=400)
 
-    result = call_gemini(q, model)
-    return jsonify(result)
+    answer = call_gemini(q, model)
+    if not answer:
+        return Response("⚠️ Error from API", mimetype="text/plain", status=500)
+
+    # 🔑 chỉ trả về text
+    return Response(answer, mimetype="text/plain")
 
 @app.route("/")
 def index():
