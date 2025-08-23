@@ -1,30 +1,50 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-  <meta charset="UTF-8">
-  <title>Chatbot Gemini API</title>
+  <meta charset="UTF-8" />
+  <title>Chatbot Gemini - Test</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body { font-family: Arial, sans-serif; max-width: 700px; margin: 40px auto; }
-    input, button { padding: 10px; margin-top: 10px; width: 100%; border-radius: 6px; border: 1px solid #ccc; }
-    pre { background: #f5f5f5; padding: 12px; border-radius: 6px; white-space: pre-wrap; }
+    body { font-family: Arial, sans-serif; max-width: 700px; margin: 28px auto; padding: 0 12px; }
+    input[type="text"] { padding: 10px; width: 100%; box-sizing: border-box; border-radius: 8px; border: 1px solid #ccc; }
+    button { margin-top: 10px; padding: 10px 14px; border-radius: 8px; border: none; cursor: pointer; background: #0066ff; color: white; width: 100%; font-size: 16px; }
+    pre { white-space: pre-wrap; background: #f7f7f7; padding: 12px; border-radius: 8px; margin-top: 12px; min-height: 80px; }
   </style>
 </head>
 <body>
-  <h2>Chatbot Gemini API</h2>
-  <input id="question" placeholder="Nhập câu hỏi...">
-  <button onclick="ask()">Gửi</button>
+  <h2>Chatbot Gemini - Test</h2>
+  <input id="question" type="text" placeholder="Nhập câu hỏi... (ví dụ: hello)" />
+  <button id="sendBtn">Gửi</button>
   <pre id="result">Kết quả sẽ hiển thị ở đây...</pre>
 
   <script>
-    async function ask(){
-      const q = document.getElementById("question").value;
+    const qEl = document.getElementById("question");
+    const resEl = document.getElementById("result");
+    const btn = document.getElementById("sendBtn");
+
+    btn.onclick = async () => {
+      const q = qEl.value.trim();
       if(!q) return;
-      const res = await fetch("/ask?q=" + encodeURIComponent(q));
-      const data = await res.json();
-      document.getElementById("result").textContent = data.ok 
-        ? data.answer 
-        : "❌ Error: " + data.error;
-    }
+      resEl.textContent = "Đang gọi API...";
+      try {
+        const resp = await fetch("/ask?q=" + encodeURIComponent(q), { method: "GET" });
+        const ctype = resp.headers.get("content-type") || "";
+        if (ctype.includes("application/json")) {
+          const data = await resp.json();
+          if (data.ok) {
+            resEl.textContent = data.answer;
+          } else {
+            resEl.textContent = "❌ Error: " + (data.error || "Unknown error");
+          }
+        } else {
+          // fallback nếu server trả text/plain
+          const text = await resp.text();
+          resEl.textContent = text;
+        }
+      } catch (e) {
+        resEl.textContent = "Fetch error: " + e.toString();
+      }
+    };
   </script>
 </body>
 </html>
