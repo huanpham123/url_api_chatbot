@@ -6,7 +6,7 @@ import requests
 import os
 
 # ====== CẤU HÌNH (API KEY để trong code như yêu cầu) ======
-API_KEY = "AIzaSyA22-Sh4sHm7AgB2EOmyrrti-jKQnaSxfE"   # <-- API key đã được chèn ở đây
+API_KEY = "#"   # <-- API key đã được chèn ở đây
 DEFAULT_MODEL = "gemini-2.0-flash"
 GEMINI_ENDPOINT_TMPL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
@@ -160,3 +160,4 @@ if __name__ == "__main__":
     # nếu muốn thay port, set env PORT trước khi chạy
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
+
