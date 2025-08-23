@@ -1,9 +1,9 @@
 import requests
-from flask import Flask, request, Response, render_template
+from flask import Flask, request, jsonify, render_template, Response
 from flask_cors import CORS
 
 # ====== CONFIG ======
-API_KEY = "AIzaSyA22-Sh4sHm7AgB2EOmyrrti-jKQnaSxfE"  # ⚠️ key của bạn
+API_KEY = "AIzaSyA22-Sh4sHm7AgB2EOmyrrti-jKQnaSxfE"   # 👉 Thay bằng API key thật của bạn
 DEFAULT_MODEL = "gemini-2.0-flash"
 GEMINI_ENDPOINT_TMPL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
@@ -12,10 +12,17 @@ CORS(app)
 
 def call_gemini(question: str, model: str = DEFAULT_MODEL):
     url = GEMINI_ENDPOINT_TMPL.format(model=model) + f"?key={API_KEY}"
-    payload = {"contents": [{"parts": [{"text": question}]}]}
-    resp = requests.post(url, json=payload)
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "contents": [
+            {"parts": [{"text": question}]}
+        ]
+    }
+
+    resp = requests.post(url, headers=headers, json=payload)
 
     if resp.status_code != 200:
+        print("❌ API Error:", resp.status_code, resp.text)
         return None
 
     data = resp.json()
@@ -24,8 +31,8 @@ def call_gemini(question: str, model: str = DEFAULT_MODEL):
         if candidates:
             parts = candidates[0].get("content", {}).get("parts", [])
             return "".join(p.get("text", "") for p in parts)
-    except Exception:
-        return None
+    except Exception as e:
+        print("❌ Parse error:", e)
 
     return None
 
@@ -35,18 +42,17 @@ def ask():
     model = request.args.get("model", DEFAULT_MODEL)
 
     if not q:
-        return Response("⚠️ Missing question", mimetype="text/plain", status=400)
+        return jsonify({"ok": False, "error": "Missing question parameter 'q'"}), 400
 
     answer = call_gemini(q, model)
     if not answer:
-        return Response("⚠️ Error from API", mimetype="text/plain", status=500)
+        return jsonify({"ok": False, "error": "Error from API"}), 502
 
-    # 🔑 chỉ trả về text
-    return Response(answer, mimetype="text/plain")
+    return jsonify({"ok": True, "answer": answer})
 
 @app.route("/")
 def index():
     return render_template("test.html")
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, host="0.0.0.0", port=5000)
