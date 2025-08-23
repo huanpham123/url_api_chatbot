@@ -1,61 +1,70 @@
-import os
 import json
 import logging
 from typing import Optional
 from flask import Flask, request, jsonify, render_template
-from flask_cors import CORS
 import requests
+import os
 
-# ====== CẤU HÌNH (để trực tiếp trong code) ======
-API_KEY = "AIzaSyA22-Sh4sHm7AgB2EOmyrrti-jKQnaSxfE"   # <-- Thay bằng API key của bạn
+# ====== CẤU HÌNH (API KEY để trong code như yêu cầu) ======
+API_KEY = "AIzaSyA22-Sh4sHm7AgB2EOmyrrti-jKQnaSxfE"   # <-- API key đã được chèn ở đây
 DEFAULT_MODEL = "gemini-2.0-flash"
 GEMINI_ENDPOINT_TMPL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
-# ====== logging ======
+# ====== Logging ======
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gemini-proxy")
 
 app = Flask(__name__, template_folder="templates")
-CORS(app)
+
+def save_last_response(resp: requests.Response):
+    """Lưu response raw + headers vào file để debug."""
+    try:
+        with open("last_gemini_response.txt", "w", encoding="utf-8") as f:
+            f.write(f"STATUS: {resp.status_code}\n\n")
+            f.write("HEADERS:\n")
+            for k, v in resp.headers.items():
+                f.write(f"{k}: {v}\n")
+            f.write("\nBODY:\n")
+            f.write(resp.text)
+    except Exception as e:
+        logger.warning("Không thể ghi last_gemini_response.txt: %s", e)
 
 def try_parse_response_json(data: dict) -> Optional[str]:
-    """Thử nhiều cách lấy text từ JSON trả về của Gemini/Generative API."""
+    """Cố gắng lấy text trả về từ JSON response (nhiều dạng cấu trúc có thể xuất hiện)."""
     if not isinstance(data, dict):
         return None
 
-    # 1) candidates -> content.parts[*].text
+    # Thử cấu trúc: candidates -> content -> parts -> text
     candidates = data.get("candidates") or data.get("outputs") or data.get("choices")
-    if isinstance(candidates, list) and len(candidates) > 0:
+    if isinstance(candidates, list) and candidates:
         first = candidates[0]
         if isinstance(first, dict):
-            # try content.parts
-            content = first.get("content") or first
-            parts = None
-            if isinstance(content, dict):
-                parts = content.get("parts") or content.get("text") or None
-            if isinstance(parts, list):
+            content = first.get("content") or {}
+            parts = content.get("parts") or []
+            if isinstance(parts, list) and parts:
                 texts = []
                 for p in parts:
                     if isinstance(p, dict):
-                        texts.append(p.get("text") or p.get("content") or "")
+                        t = p.get("text") or p.get("content") or ""
                     else:
-                        texts.append(str(p))
+                        t = str(p)
+                    texts.append(t)
                 joined = "".join(texts).strip()
                 if joined:
                     return joined
-            # try direct keys in first
-            for k in ("text", "output", "content", "message"):
+            # fallback trong candidate
+            for k in ("text", "output", "message"):
                 v = first.get(k)
                 if isinstance(v, str) and v.strip():
                     return v.strip()
 
-    # 2) top-level known fields
+    # Thử các key top-level
     for key in ("output_text", "response", "result", "output"):
         v = data.get(key)
         if isinstance(v, str) and v.strip():
             return v.strip()
 
-    # 3) if any string anywhere, pick the longest (fallback)
+    # Lấy chuỗi dài nhất trong json (fallback)
     longest = ""
     def walk(obj):
         nonlocal longest
@@ -71,72 +80,61 @@ def try_parse_response_json(data: dict) -> Optional[str]:
     walk(data)
     return longest.strip() if longest else None
 
-def call_gemini(question: str, model: str = DEFAULT_MODEL, timeout: int = 15) -> Optional[str]:
+def call_gemini(question: str, model: str = DEFAULT_MODEL, timeout: int = 20) -> Optional[str]:
     """
-    Gọi Generative Language API với nhiều payload thử nghiệm.
-    Trả text nếu thành công, ngược lại trả None (và in log chi tiết).
+    Gọi Google Generative Language API theo ví dụ curl (header X-goog-api-key, payload contents/parts)
+    Trả về text nếu thành công, ngược lại None.
     """
-    url = GEMINI_ENDPOINT_TMPL.format(model=model) + f"?key={API_KEY}"
-    headers = {"Content-Type": "application/json; charset=utf-8"}
+    url = GEMINI_ENDPOINT_TMPL.format(model=model)
+    headers = {
+        "Content-Type": "application/json",
+        "X-goog-api-key": API_KEY
+    }
 
-    payloads = [
-        # payload kiểu bạn đã dùng ban đầu
-        {"contents": [{"parts": [{"text": question}]}]},
-        # payload 'prompt' phổ biến
-        {"prompt": {"text": question}, "temperature": 0.2},
-        # payload simple
-        {"input": question},
-        {"text": question},
-    ]
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": question}
+                ]
+            }
+        ]
+    }
 
-    last_text = None
-    for p in payloads:
-        try:
-            resp = requests.post(url, headers=headers, json=p, timeout=timeout)
-        except Exception as e:
-            logger.warning("Request failed (exception) for payload keys %s : %s", list(p.keys()), e)
-            last_text = str(e)
-            continue
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
+    except Exception as e:
+        logger.error("Request exception khi gọi Gemini: %s", e)
+        return None
 
-        status = resp.status_code
-        body = resp.text or ""
-        logger.info("Tried payload keys %s => status %s", list(p.keys()), status)
-        logger.debug("Response body (truncated): %s", body[:1000])
-        last_text = body
+    # Lưu/dump response cho debug
+    save_last_response(resp)
+    logger.info("Gọi Gemini -> status=%s", resp.status_code)
 
-        if status != 200:
-            # in log chi tiết để bạn biết lý do
-            logger.error("API returned non-200. status=%s body=%s", status, body[:2000])
-            # thử payload khác
-            continue
+    if resp.status_code != 200:
+        logger.error("Gemini trả lỗi status=%s, body (truncated): %s", resp.status_code, (resp.text or "")[:1500])
+        return None
 
-        # status == 200
-        # thử parse JSON
-        try:
-            data = resp.json()
-        except ValueError:
-            text = body.strip()
-            if text:
-                return text
-            else:
-                continue
+    # Nếu 200, parse JSON hoặc fallback về text
+    try:
+        j = resp.json()
+    except ValueError:
+        text = resp.text.strip()
+        return text if text else None
 
-        answer = try_parse_response_json(data)
-        if answer:
-            return answer
+    answer = try_parse_response_json(j)
+    if answer:
+        return answer
 
-        # fallback trả toàn bộ JSON (string)
-        try:
-            return json.dumps(data, ensure_ascii=False)
-        except Exception:
-            continue
-
-    logger.error("Tất cả payload đều thất bại. last_response (truncated): %s", (last_text or "")[:2000])
-    return None
+    # fallback: return whole JSON string
+    try:
+        return json.dumps(j, ensure_ascii=False)
+    except Exception:
+        return None
 
 @app.route("/ask", methods=["GET", "POST"])
 def ask():
-    # Hỗ trợ GET ?q=... hoặc POST JSON {"q": "..."}
+    # hỗ trợ GET ?q=... và POST JSON {"q":"..."}
     if request.method == "GET":
         q = request.args.get("q", "").strip()
         model = request.args.get("model", DEFAULT_MODEL)
@@ -150,8 +148,7 @@ def ask():
 
     answer = call_gemini(q, model)
     if not answer:
-        # in thêm gợi ý debug cho bạn
-        return jsonify({"ok": False, "error": "Error from API. Check server logs for details (status/body)."}), 502
+        return jsonify({"ok": False, "error": "Error from API. See server logs and last_gemini_response.txt"}), 502
 
     return jsonify({"ok": True, "answer": answer}), 200
 
@@ -160,5 +157,6 @@ def index():
     return render_template("test.html")
 
 if __name__ == "__main__":
-    # chạy local, debug ON để bạn thấy log
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # nếu muốn thay port, set env PORT trước khi chạy
+    port = int(os.getenv("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
